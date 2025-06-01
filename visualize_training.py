@@ -20,16 +20,27 @@ import shutil
 import traceback
 import uuid
 
-# 添加pt.darts目录到系统路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'pt.darts')))
+# 根据 visualize_training.py 的位置来寻找 pt.darts 目录并添加到系统路径
+# 如果 pt.darts 位于 visualize_training.py 的父目录，这行是正确的
+# 如果 pt.darts 位于 visualize_training.py 的同级目录或其他位置，需要相应修改
+pt_darts_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'pt.darts'))
+if os.path.exists(pt_darts_path):
+    sys.path.append(pt_darts_path)
+    print(f"Added {pt_darts_path} to sys.path") # 添加打印用于调试
+else:
+    print(f"Warning: {pt_darts_path} not found. pt.darts module might not be available.") # 添加打印用于调试
+
 
 # 尝试导入graphviz，如果不可用则提供替代方案
 try:
     from graphviz import Digraph
     HAS_GRAPHVIZ = True
+    print("graphviz imported successfully.") # 添加打印用于调试
 except ImportError:
     HAS_GRAPHVIZ = False
     st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
+    print("graphviz import failed.") # 添加打印用于调试
+
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
@@ -37,7 +48,7 @@ def mark_topk_positions(input_tensor, k):
     assert input_tensor.dim() == 2, "输入应为二维张量"
     rows, cols = input_tensor.shape
     assert 1 <= k <= cols, f"k必须介于1和列数{cols}之间"
-    
+
     result = torch.zeros((rows, cols), dtype=torch.long)
     for i in range(rows):
         row = input_tensor[i, :]
@@ -50,7 +61,7 @@ class TrainingVisualizer:
     def __init__(self, log_dir):
         """
         初始化可视化器
-        
+
         参数:
         - log_dir: 训练日志和断点文件所在的目录
         """
@@ -58,12 +69,18 @@ class TrainingVisualizer:
         self.checkpoints_dir = os.path.join(log_dir, 'checkpoints')
         self.log_file = os.path.join(log_dir, 'log.txt')
         self.epochs_data = self._parse_logs()
-        
+
     def _parse_logs(self):
         """解析训练日志文件"""
         epochs = []
         current_epoch = None
-        
+
+        # 检查日志文件是否存在
+        if not os.path.exists(self.log_file):
+            st.error(f"日志文件未找到: {self.log_file}")
+            print(f"Error: Log file not found at {self.log_file}") # 添加打印用于调试
+            return []
+
         try:
             with open(self.log_file, 'r', encoding='utf-8') as f:
                 lines = list(f)
@@ -178,6 +195,7 @@ class TrainingVisualizer:
                 if current_epoch:
                     epochs.append(current_epoch)
                 # 加载每个epoch的架构参数（如果有断点文件）
+                # 这里的checkpoint路径也需要基于log_dir
                 for epoch in epochs:
                     checkpoint_path = os.path.join(self.checkpoints_dir, f'checkpoint_epoch_{epoch["epoch"]}.pt')
                     if os.path.exists(checkpoint_path):
@@ -196,6 +214,7 @@ class TrainingVisualizer:
                 return epochs
         except Exception as e:
             st.error(f"解析日志文件时出错: {str(e)}")
+            print(f"Error during log file parsing: {str(e)}\n{traceback.format_exc()}") # 添加打印用于调试
             return []
 
     def visualize_genotype(self, genotype):
@@ -262,9 +281,9 @@ class TrainingVisualizer:
             "valid_acc": e["valid_acc"][-1] if e["valid_acc"] else None,
             "lr": e["lr"]
         } for e in epochs_data[:selected_epoch+1]])
-        
+
         fig = go.Figure()
-        
+
         # 添加准确率曲线
         fig.add_trace(go.Scatter(
             x=df.epoch, y=df.train_acc,
@@ -276,7 +295,7 @@ class TrainingVisualizer:
             name="验证准确率",
             line=dict(color='#ff7f0e')
         ))
-        
+
         # 添加学习率曲线（使用次坐标轴）
         fig.add_trace(go.Scatter(
             x=df.epoch, y=df.lr,
@@ -284,7 +303,7 @@ class TrainingVisualizer:
             yaxis="y2",
             line=dict(color='#2ca02c', dash='dash')
         ))
-        
+
         # 更新布局
         fig.update_layout(
             title="训练过程指标",
@@ -298,25 +317,25 @@ class TrainingVisualizer:
             hovermode="x unified",
             showlegend=True
         )
-        
+
         return fig
 
     def plot_alpha_heatmap(self, alpha_matrix, title, binary_mask=None):
         """绘制alpha参数热力图"""
         if alpha_matrix is None:
             return None
-            
+
         fig, ax = plt.subplots(figsize=(10, 4))
         im = ax.imshow(alpha_matrix, cmap='viridis')
-        
+
         # 添加颜色条
         plt.colorbar(im, ax=ax)
-        
+
         # 设置标题和标签
         ax.set_title(title)
         ax.set_xlabel("操作索引")
         ax.set_ylabel("边索引")
-        
+
         # 如果提供了二进制掩码，在热力图上标记topk位置
         if binary_mask is not None:
             rows, cols = binary_mask.shape
@@ -325,9 +344,9 @@ class TrainingVisualizer:
                     if binary_mask[i, j] == 1:
                         rect = plt.Rectangle((j-0.5, i-0.5), 1, 1, fill=False, edgecolor='red', linewidth=2)
                         ax.add_patch(rect)
-        
+
         return fig
-        
+
     def plot_genotype_graph(self, genotype, cell_type="normal"):
         if genotype is None or not HAS_GRAPHVIZ:
             st.error("未检测到genotype或Graphviz不可用")
@@ -346,9 +365,11 @@ class TrainingVisualizer:
                 return rendered_path
             else:
                 st.error(f"图片文件未生成: {rendered_path}")
+                print(f"Error: Rendered image file not found at {rendered_path}") # 添加打印用于调试
                 return None
         except Exception as e:
             st.error(f"架构图生成失败: {str(e)}\n{traceback.format_exc()}")
+            print(f"Error generating genotype graph: {str(e)}\n{traceback.format_exc()}") # 添加打印用于调试
             return None
 
 @st.cache_resource
@@ -373,19 +394,47 @@ def main():
     st.set_page_config(layout="wide", page_title="NAS训练可视化")
     st.title("神经架构搜索训练过程可视化")
     st.sidebar.title("控制面板")
-    exp_dirs = glob.glob("../search-*")
+
+    # 获取当前脚本所在的目录
+    script_dir = os.path.dirname(__file__)
+
+    # 构建 search-* 目录的完整路径模式
+    # 根据您GitHub的截图，search-* 目录与 visualize_training.py 在同一目录下
+    search_dir_pattern = os.path.join(script_dir, "search-*")
+
+    # 使用新的模式来查找目录
+    exp_dirs = glob.glob(search_dir_pattern)
+
+    # ====== 临时添加的代码，用于排查 (保留这段有助于确认修改是否生效) ======
+    st.write(f"当前脚本目录: {script_dir}")
+    st.write(f"用于查找实验目录的模式: {search_dir_pattern}")
+    try:
+        # 列出脚本所在目录下的文件和目录
+        st.write(f"脚本目录下的文件和目录: {os.listdir(script_dir)}")
+    except Exception as e:
+        st.write(f"列出脚本目录内容时出错: {e}")
+    st.write(f"glob.glob('{search_dir_pattern}') 的结果: {exp_dirs}")
+    # ==================================================================
+
     if not exp_dirs:
-        st.error("未找到训练实验目录！")
+        st.error(f"未找到训练实验目录！在 '{script_dir}' 中查找 '{search_dir_pattern}' 时没有找到匹配项。请确保search-*目录存在且名称正确。")
+        print(f"Error: No experiment directories found using pattern {search_dir_pattern} in {script_dir}") # 添加打印用于调试
         return
+
     selected_exp = st.sidebar.selectbox(
         "选择实验目录",
         exp_dirs,
         format_func=lambda x: os.path.basename(x)
     )
+
+    # 由于TrainingVisualizer需要完整的目录路径，这里直接传入找到的目录
     visualizer = get_visualizer(selected_exp)
+
     if not visualizer.epochs_data:
-        st.error("无法加载训练数据！")
+        st.error("无法加载训练数据！请检查log.txt文件是否存在且内容正确。")
+        print(f"Error: Failed to load training data from {selected_exp}") # 添加打印用于调试
         return
+
     max_epoch = len(visualizer.epochs_data) - 1
     if max_epoch == 0:
         selected_epoch = 0
@@ -494,5 +543,6 @@ def main():
             st.rerun()
 
 if __name__ == "__main__":
-    os.environ['PATH'] = r'E:\Graphviz\bin;' + os.environ['PATH']
+    # 在云端环境中，我们不需要设置Graphviz路径，可以移除或注释掉这行
+    # os.environ['PATH'] = r'E:\Graphviz\bin;' + os.environ['PATH']
     main()
