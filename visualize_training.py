@@ -19,6 +19,7 @@ import visualize as viz
 import shutil
 import traceback
 import uuid
+import subprocess
 
 # 根据 visualize_training.py 的位置来寻找 pt.darts 目录并添加到系统路径
 # 如果 pt.darts 位于 visualize_training.py 的父目录，这行是正确的
@@ -41,15 +42,18 @@ except ImportError:
     st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
     print("graphviz import failed.") # 添加打印用于调试
 
-# Check if Graphviz dot executable is in the PATH
-dot_path = shutil.which("dot")
-if dot_path is None:
-    print("Error: Graphviz executable 'dot' not found in PATH.")
+# Check if Graphviz dot executable is available and print its version
+try:
+    result = subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
+    print(f"Graphviz dot command is available. Version:\n{result.stdout.strip()}")
+except FileNotFoundError:
+    print("Error: 'dot' command not found. Graphviz is not installed or not in PATH.")
     print(f"Current PATH: {os.environ.get('PATH')}")
-    # Optionally, you might want to raise an error or display a more prominent message in Streamlit
-    # st.error("Graphviz executable 'dot' not found. Image generation will fail.")
-else:
-    print(f"Graphviz executable 'dot' found at: {dot_path}")
+except subprocess.CalledProcessError as e:
+    print(f"Error running 'dot -V': {e}")
+    print(f"Stderr:\n{e.stderr.strip()}")
+except Exception as e:
+    print(f"An unexpected error occurred checking dot: {e}")
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
