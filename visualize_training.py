@@ -1,4 +1,7 @@
 import streamlit as st
+
+st.set_page_config(layout="wide", page_title="NAS训练可视化")
+
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import networkx as nx
@@ -409,7 +412,6 @@ def get_genotype_img(genotype, cell_type, selected_exp):
     return visualizer.plot_genotype_graph(genotype, cell_type)
 
 def main():
-    st.set_page_config(layout="wide", page_title="NAS训练可视化")
     st.title("神经架构搜索训练过程可视化")
     st.sidebar.title("控制面板")
 
