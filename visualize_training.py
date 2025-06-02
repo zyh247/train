@@ -1,4 +1,7 @@
 import streamlit as st
+
+st.set_page_config(layout="wide", page_title="NAS训练可视化")
+
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import networkx as nx
@@ -19,6 +22,7 @@ import visualize as viz
 import shutil
 import traceback
 import uuid
+import subprocess
 
 # 根据 visualize_training.py 的位置来寻找 pt.darts 目录并添加到系统路径
 # 如果 pt.darts 位于 visualize_training.py 的父目录，这行是正确的
@@ -41,6 +45,23 @@ except ImportError:
     st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
     print("graphviz import failed.") # 添加打印用于调试
 
+# Check if Graphviz dot executable is available and print its version
+try:
+    result = subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
+    print(f"Graphviz dot command is available. Version:\n{result.stdout.strip()}")
+except FileNotFoundError:
+    error_msg = "Error: 'dot' command not found. Graphviz is not installed or not in PATH. Image generation will fail."
+    print(error_msg)
+    print(f"Current PATH: {os.environ.get('PATH')}")
+    st.error(error_msg)
+except subprocess.CalledProcessError as e:
+    error_msg = f"Error running 'dot -V': {e}\nStderr:\n{e.stderr.strip()}"
+    print(error_msg)
+    st.error(error_msg)
+except Exception as e:
+    error_msg = f"An unexpected error occurred checking dot: {e}"
+    print(error_msg)
+    st.error(error_msg)
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
@@ -358,18 +379,29 @@ class TrainingVisualizer:
             else:
                 cell_genotype = genotype["reduce"]
                 caption = "Reduce Cell"
-            tmp_path = os.path.join(tempfile.gettempdir(), f"nas_{uuid.uuid4().hex}")
+            
+            # 使用当前工作目录而不是临时目录
+            output_dir = os.path.join(os.getcwd(), "temp_images")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            tmp_path = os.path.join(output_dir, f"nas_{uuid.uuid4().hex}")
+            print(f"正在生成图片，保存路径: {tmp_path}")  # 调试信息
+            
             viz.plot(cell_genotype, tmp_path, caption)
             rendered_path = tmp_path + '.png'
+            
             if os.path.exists(rendered_path):
+                print(f"图片生成成功: {rendered_path}")  # 调试信息
                 return rendered_path
             else:
-                st.error(f"图片文件未生成: {rendered_path}")
-                print(f"Error: Rendered image file not found at {rendered_path}") # 添加打印用于调试
+                error_msg = f"图片文件未生成: {rendered_path}"
+                st.error(error_msg)
+                print(f"Error: {error_msg}")  # 调试信息
                 return None
         except Exception as e:
-            st.error(f"架构图生成失败: {str(e)}\n{traceback.format_exc()}")
-            print(f"Error generating genotype graph: {str(e)}\n{traceback.format_exc()}") # 添加打印用于调试
+            error_msg = f"架构图生成失败: {str(e)}\n{traceback.format_exc()}"
+            st.error(error_msg)
+            print(f"Error: {error_msg}")  # 调试信息
             return None
 
 @st.cache_resource
@@ -380,7 +412,7 @@ def get_visualizer(selected_exp):
 def get_alpha_df(alpha):
     if alpha is not None and hasattr(alpha, 'size') and alpha.size > 0:
         df = pd.DataFrame(alpha)
-        df = df.applymap(lambda x: f"{x:.4f}")
+        df = df.map(lambda x: f"{x:.4f}")
         return df
     return None
 
@@ -391,7 +423,6 @@ def get_genotype_img(genotype, cell_type, selected_exp):
     return visualizer.plot_genotype_graph(genotype, cell_type)
 
 def main():
-    st.set_page_config(layout="wide", page_title="NAS训练可视化")
     st.title("神经架构搜索训练过程可视化")
     st.sidebar.title("控制面板")
 
