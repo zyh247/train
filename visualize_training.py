@@ -39,29 +39,8 @@ else:
 try:
     from graphviz import Digraph
     HAS_GRAPHVIZ = True
-    print("graphviz imported successfully.") # 添加打印用于调试
 except ImportError:
     HAS_GRAPHVIZ = False
-    st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
-    print("graphviz import failed.") # 添加打印用于调试
-
-# Check if Graphviz dot executable is available and print its version
-try:
-    result = subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
-    print(f"Graphviz dot command is available. Version:\n{result.stdout.strip()}")
-except FileNotFoundError:
-    error_msg = "Error: 'dot' command not found. Graphviz is not installed or not in PATH. Image generation will fail."
-    print(error_msg)
-    print(f"Current PATH: {os.environ.get('PATH')}")
-    st.error(error_msg)
-except subprocess.CalledProcessError as e:
-    error_msg = f"Error running 'dot -V': {e}\nStderr:\n{e.stderr.strip()}"
-    print(error_msg)
-    st.error(error_msg)
-except Exception as e:
-    error_msg = f"An unexpected error occurred checking dot: {e}"
-    print(error_msg)
-    st.error(error_msg)
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
@@ -469,7 +448,7 @@ def main():
     auto_play = st.sidebar.checkbox("自动播放", help="自动播放训练过程")
     if auto_play:
         time_interval = st.sidebar.slider("播放速度(秒/epoch)", 0.5, 5.0, 1.0)
-    st.subheader("架构参数和架构图")
+    
     # 第一排：参数表格
     st.subheader("架构参数")
     col1, col2 = st.columns(2)
@@ -500,22 +479,7 @@ def main():
         else:
             st.warning("无有效reduce_alpha参数")
 
-    # 第二排：架构图
-    st.subheader("架构图")
-    col3, col4 = st.columns(2)
-    with col3:
-        genotype = visualizer.epochs_data[selected_epoch]["genotype"]
-        if genotype and HAS_GRAPHVIZ:
-            img_path = get_genotype_img(genotype, "normal", selected_exp)
-            if img_path:
-                st.image(img_path, use_container_width=True)
-    with col4:
-        if genotype and HAS_GRAPHVIZ:
-            img_path = get_genotype_img(genotype, "reduce", selected_exp)
-            if img_path:
-                st.image(img_path, use_container_width=True)
-
-    # 第三排：训练指标和epoch详情
+    # 训练指标和epoch详情
     st.subheader("训练指标与当前Epoch详情")
     col5, col6 = st.columns([2, 1])
     with col5:
