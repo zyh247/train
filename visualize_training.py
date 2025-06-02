@@ -41,6 +41,15 @@ except ImportError:
     st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
     print("graphviz import failed.") # 添加打印用于调试
 
+# Check if Graphviz dot executable is in the PATH
+dot_path = shutil.which("dot")
+if dot_path is None:
+    print("Error: Graphviz executable 'dot' not found in PATH.")
+    print(f"Current PATH: {os.environ.get('PATH')}")
+    # Optionally, you might want to raise an error or display a more prominent message in Streamlit
+    # st.error("Graphviz executable 'dot' not found. Image generation will fail.")
+else:
+    print(f"Graphviz executable 'dot' found at: {dot_path}")
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
