@@ -47,13 +47,18 @@ try:
     result = subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
     print(f"Graphviz dot command is available. Version:\n{result.stdout.strip()}")
 except FileNotFoundError:
-    print("Error: 'dot' command not found. Graphviz is not installed or not in PATH.")
+    error_msg = "Error: 'dot' command not found. Graphviz is not installed or not in PATH. Image generation will fail."
+    print(error_msg)
     print(f"Current PATH: {os.environ.get('PATH')}")
+    st.error(error_msg)
 except subprocess.CalledProcessError as e:
-    print(f"Error running 'dot -V': {e}")
-    print(f"Stderr:\n{e.stderr.strip()}")
+    error_msg = f"Error running 'dot -V': {e}\nStderr:\n{e.stderr.strip()}"
+    print(error_msg)
+    st.error(error_msg)
 except Exception as e:
-    print(f"An unexpected error occurred checking dot: {e}")
+    error_msg = f"An unexpected error occurred checking dot: {e}"
+    print(error_msg)
+    st.error(error_msg)
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
