@@ -1,4 +1,7 @@
 import streamlit as st
+
+st.set_page_config(layout="wide", page_title="NAS训练可视化")
+
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import networkx as nx
@@ -19,6 +22,7 @@ import visualize as viz
 import shutil
 import traceback
 import uuid
+import subprocess
 
 # 根据 visualize_training.py 的位置来寻找 pt.darts 目录并添加到系统路径
 # 如果 pt.darts 位于 visualize_training.py 的父目录，这行是正确的
@@ -41,6 +45,23 @@ except ImportError:
     st.warning("未安装graphviz包，某些可视化功能将不可用。请使用pip install graphviz安装。")
     print("graphviz import failed.") # 添加打印用于调试
 
+# Check if Graphviz dot executable is available and print its version
+try:
+    result = subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
+    print(f"Graphviz dot command is available. Version:\n{result.stdout.strip()}")
+except FileNotFoundError:
+    error_msg = "Error: 'dot' command not found. Graphviz is not installed or not in PATH. Image generation will fail."
+    print(error_msg)
+    print(f"Current PATH: {os.environ.get('PATH')}")
+    st.error(error_msg)
+except subprocess.CalledProcessError as e:
+    error_msg = f"Error running 'dot -V': {e}\nStderr:\n{e.stderr.strip()}"
+    print(error_msg)
+    st.error(error_msg)
+except Exception as e:
+    error_msg = f"An unexpected error occurred checking dot: {e}"
+    print(error_msg)
+    st.error(error_msg)
 
 # 标记前k个最大值的位置为1，其余为0
 def mark_topk_positions(input_tensor, k):
@@ -358,18 +379,20 @@ class TrainingVisualizer:
             else:
                 cell_genotype = genotype["reduce"]
                 caption = "Reduce Cell"
-            tmp_path = os.path.join(tempfile.gettempdir(), f"nas_{uuid.uuid4().hex}")
+            
+            # 使用当前工作目录而不是临时目录
+            output_dir = os.path.join(os.getcwd(), "temp_images")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            tmp_path = os.path.join(output_dir, f"nas_{uuid.uuid4().hex}")
             viz.plot(cell_genotype, tmp_path, caption)
             rendered_path = tmp_path + '.png'
+            
             if os.path.exists(rendered_path):
                 return rendered_path
             else:
-                st.error(f"图片文件未生成: {rendered_path}")
-                print(f"Error: Rendered image file not found at {rendered_path}") # 添加打印用于调试
                 return None
         except Exception as e:
-            st.error(f"架构图生成失败: {str(e)}\n{traceback.format_exc()}")
-            print(f"Error generating genotype graph: {str(e)}\n{traceback.format_exc()}") # 添加打印用于调试
             return None
 
 @st.cache_resource
@@ -380,7 +403,7 @@ def get_visualizer(selected_exp):
 def get_alpha_df(alpha):
     if alpha is not None and hasattr(alpha, 'size') and alpha.size > 0:
         df = pd.DataFrame(alpha)
-        df = df.applymap(lambda x: f"{x:.4f}")
+        df = df.map(lambda x: f"{x:.4f}")
         return df
     return None
 
@@ -391,7 +414,6 @@ def get_genotype_img(genotype, cell_type, selected_exp):
     return visualizer.plot_genotype_graph(genotype, cell_type)
 
 def main():
-    st.set_page_config(layout="wide", page_title="NAS训练可视化")
     st.title("神经架构搜索训练过程可视化")
     st.sidebar.title("控制面板")
 
@@ -399,26 +421,13 @@ def main():
     script_dir = os.path.dirname(__file__)
 
     # 构建 search-* 目录的完整路径模式
-    # 根据您GitHub的截图，search-* 目录与 visualize_training.py 在同一目录下
     search_dir_pattern = os.path.join(script_dir, "search-*")
 
     # 使用新的模式来查找目录
     exp_dirs = glob.glob(search_dir_pattern)
 
-    # ====== 临时添加的代码，用于排查 (保留这段有助于确认修改是否生效) ======
-    st.write(f"当前脚本目录: {script_dir}")
-    st.write(f"用于查找实验目录的模式: {search_dir_pattern}")
-    try:
-        # 列出脚本所在目录下的文件和目录
-        st.write(f"脚本目录下的文件和目录: {os.listdir(script_dir)}")
-    except Exception as e:
-        st.write(f"列出脚本目录内容时出错: {e}")
-    st.write(f"glob.glob('{search_dir_pattern}') 的结果: {exp_dirs}")
-    # ==================================================================
-
     if not exp_dirs:
-        st.error(f"未找到训练实验目录！在 '{script_dir}' 中查找 '{search_dir_pattern}' 时没有找到匹配项。请确保search-*目录存在且名称正确。")
-        print(f"Error: No experiment directories found using pattern {search_dir_pattern} in {script_dir}") # 添加打印用于调试
+        st.error(f"未找到训练实验目录！请确保search-*目录存在且名称正确。")
         return
 
     selected_exp = st.sidebar.selectbox(
@@ -432,7 +441,6 @@ def main():
 
     if not visualizer.epochs_data:
         st.error("无法加载训练数据！请检查log.txt文件是否存在且内容正确。")
-        print(f"Error: Failed to load training data from {selected_exp}") # 添加打印用于调试
         return
 
     max_epoch = len(visualizer.epochs_data) - 1
