@@ -1,4 +1,38 @@
 import streamlit as st
+import os
+import sys
+
+# 设置 Graphviz 路径
+def setup_graphviz_path():
+    # 常见的 Graphviz 安装路径
+    possible_paths = [
+        r'C:\Program Files\Graphviz\bin',
+        r'C:\Program Files (x86)\Graphviz\bin',
+        r'C:\Graphviz\bin',
+        # 添加其他可能的路径
+    ]
+    
+    # 检查是否已经在 PATH 中
+    try:
+        subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
+        print("Graphviz 已经在系统 PATH 中")
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # 尝试添加可能的路径
+        for path in possible_paths:
+            if os.path.exists(path):
+                os.environ['PATH'] = path + os.pathsep + os.environ['PATH']
+                try:
+                    subprocess.run(['dot', '-V'], capture_output=True, text=True, check=True)
+                    print(f"成功添加 Graphviz 路径: {path}")
+                    return True
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    continue
+        return False
+
+# 在导入其他模块之前设置 Graphviz 路径
+if not setup_graphviz_path():
+    st.warning("未找到 Graphviz，某些可视化功能可能无法使用。请安装 Graphviz 并确保其添加到系统 PATH 中。")
 
 st.set_page_config(layout="wide", page_title="NAS训练可视化")
 
